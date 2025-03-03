@@ -1,21 +1,10 @@
-cd ~/resumerx
-cat > .gitignore << EOL
-# Python dependencies
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-.Python
-env/
-venv/
-site-packages/
-*.egg-info/
-dist/
+node_modules/
 build/
-
-# Lambda packages and zips
-lambda_package/
+*.log
 *.zip
 wkhtmltopdf_layer/
 wkhtmltox/
-EOL
+terraform.tfstate
+terraform.tfstate.backup
+.terraform/
+wkhtml.deb
