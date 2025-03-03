@@ -1,0 +1,21 @@
+cd ~/resumerx
+cat > .gitignore << EOL
+# Python dependencies
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+site-packages/
+*.egg-info/
+dist/
+build/
+
+# Lambda packages and zips
+lambda_package/
+*.zip
+wkhtmltopdf_layer/
+wkhtmltox/
+EOL
