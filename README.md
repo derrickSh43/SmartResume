@@ -1,5 +1,3 @@
-Got it—since `index.html` is already in the repo and the deployment is automated, we can trim the `README.md` further. I’ll remove the full `index.html` listing and the verification step, focusing only on the specific areas to update in `index.html` and the core setup steps: cloning, running Terraform, updating `index.html`, uploading, and optionally invalidating CloudFront. Here’s the final, concise version for your SmartResume project.
-
 ---
 
 # SmartResume Terraform Project
@@ -109,5 +107,3 @@ SmartResume/
 ### Notes
 - Replace `<distribution-id>` with your CloudFront ID.
 - Adjust bucket names in `S3.tf` if different.
-
-This is the leanest version yet—save it as `README.md` and you’re all set! Let me know if you need anything else! Enjoy your automated SmartResume deployment!
