@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>SmartResume</title>
+    <style>
+        body { max-width: 600px; margin: 0 auto; padding: 20px; text-align: center; font-family: Arial, sans-serif; }
+        h1 { color: #333; }
+        .form-container { display: flex; flex-direction: column; gap: 15px; margin-bottom: 20px; }
+        label { font-weight: bold; }
+        input, textarea { width: 100%; padding: 8px; margin-top: 5px; box-sizing: border-box; }
+        button { padding: 10px; background-color: #007bff; color: white; border: none; cursor: pointer; }
+        button:hover { background-color: #0056b3; }
+        a { color: #007bff; text-decoration: none; }
+        #message { color: #333; margin: 10px 0; }
+        #auth-form, #profile-form { display: none; }
+    </style>
+</head>
+<body>
+    <h1>SmartResume</h1>
+    <div id="auth-form" class="form-container">
+        <button onclick="signIn()">Sign In / Sign Up</button>
+    </div>
+    <div id="profile-form" class="form-container">
+        <p>Welcome, <span id="user-email"></span>!</p>
+        <button onclick="signOut()">Sign Out</button>
+        <label>Skills (comma-separated):</label>
+        <input type="text" id="skills" placeholder="e.g., Python, AWS, React" required>
+        <label>Job Description:</label>
+        <textarea id="job-description" placeholder="Paste the job description here" required></textarea>
+        <button onclick="saveProfile()">Save Profile</button>
+        <button onclick="generateResume()">Generate Resume</button>
+    </div>
+    <p id="message"></p>
+    <div id="resume-link"></div>
+
+    <script src="https://sdk.amazonaws.com/js/aws-sdk-2.809.0.min.js"></script>
+    <script>
+        console.log("Script starting");
+
+        const COGNITO_DOMAIN = "https://resumerx-auth-qnh4zzvb.auth.us-east-1.amazoncognito.com";
+        const CLIENT_ID = "5elrehhnmuh1rig2svo7rpqsg7";
+        const REDIRECT_URI = "https://dx0qzndoavbcc.cloudfront.net";
+        const SAVE_PROFILE_API = "https://h88vho7i88.execute-api.us-east-1.amazonaws.com/prod/save-profile";
+        const GENERATE_RESUME_API = "https://h88vho7i88.execute-api.us-east-1.amazonaws.com/prod/generate-resume";
+        const REGION = "us-east-1";
+
+        let user = null;
+
+        AWS.config.region = REGION;
+
+        function showAuthForm() {
+            console.log("Showing auth form");
+            document.getElementById("auth-form").style.display = "block";
+            document.getElementById("profile-form").style.display = "none";
+        }
+
+        function showProfileForm() {
+            console.log("Showing profile form");
+            document.getElementById("auth-form").style.display = "none";
+            document.getElementById("profile-form").style.display = "block";
+            document.getElementById("user-email").textContent = user.email;
+        }
+
+        console.log("Checking user session");
+        if (localStorage.getItem("user")) {
+            user = JSON.parse(localStorage.getItem("user"));
+            showProfileForm();
+        } else {
+            showAuthForm();
+        }
+
+        const urlParams = new URLSearchParams(window.location.search);
+        const code = urlParams.get("code");
+        if (code) {
+            console.log("Received code:", code);
+            exchangeCodeForToken(code);
+            window.history.replaceState(null, "", window.location.pathname);
+        } else {
+            console.log("No code in URL, skipping exchange");
+        }
+
+        function signIn() {
+            console.log("Sign-in clicked");
+            const state = Math.random().toString(36).substring(2);
+            const loginUrl = `${COGNITO_DOMAIN}/login?client_id=${CLIENT_ID}&response_type=code&scope=email+openid+profile&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&state=${state}`;
+            window.location.href = loginUrl;
+        }
+
+        async function exchangeCodeForToken(code) {
+            const tokenUrl = `${COGNITO_DOMAIN}/oauth2/token`;
+            const body = `grant_type=authorization_code&client_id=${CLIENT_ID}&code=${code}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}`;
+            try {
+                const response = await fetch(tokenUrl, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                    body: body
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    console.log("Token response:", data);
+                    user = {
+                        email: decodeJWT(data.id_token).email,
+                        token: data.id_token
+                    };
+                    localStorage.setItem("user", JSON.stringify(user));
+                    showProfileForm();
+                    document.getElementById("message").textContent = "Signed in successfully!";
+                } else {
+                    const error = await response.json();
+                    console.error("Token exchange error:", error);
+                    document.getElementById("message").textContent = `Auth error: ${error.error_description}`;
+                    showAuthForm();
+                }
+            } catch (error) {
+                console.error("Fetch error:", error);
+                document.getElementById("message").textContent = `Error: ${error.message}`;
+                showAuthForm();
+            }
+        }
+
+        function decodeJWT(token) {
+            const base64Url = token.split('.')[1];
+            const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+            const jsonPayload = decodeURIComponent(atob(base64).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join(''));
+            return JSON.parse(jsonPayload);
+        }
+
+        function signOut() {
+            console.log("Signing out");
+            user = null;
+            localStorage.removeItem("user");
+            showAuthForm();
+            document.getElementById("message").textContent = "Signed out.";
+            const logoutUrl = `${COGNITO_DOMAIN}/logout?client_id=${CLIENT_ID}&logout_uri=${encodeURIComponent(REDIRECT_URI)}`;
+            window.location.href = logoutUrl;
+        }
+
+        async function saveProfile() {
+            if (!user) return;
+            const skills = document.getElementById("skills").value;
+            const jobDescription = document.getElementById("job-description").value;
+            const payload = {
+                userId: user.email,
+                skills: skills.split(",").map(skill => skill.trim()),
+                jobDescription: jobDescription
+            };
+            try {
+                const response = await fetch(SAVE_PROFILE_API, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", "Authorization": user.token },
+                    body: JSON.stringify(payload)
+                });
+                if (response.ok) {
+                    document.getElementById("message").textContent = "Profile saved successfully!";
+                    document.getElementById("skills").value = "";
+                    document.getElementById("job-description").value = "";
+                } else {
+                    const data = await response.json();
+                    document.getElementById("message").textContent = `Error: ${data.message}`;
+                }
+            } catch (error) {
+                document.getElementById("message").textContent = `Error: ${error.message}`;
+            }
+        }
+
+        async function generateResume() {
+            if (!user) return;
+            const payload = { userId: user.email };
+            try {
+                const response = await fetch(GENERATE_RESUME_API, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", "Authorization": user.token },
+                    body: JSON.stringify(payload)
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    const resumeUrl = data.resumeUrl;
+                    document.getElementById("message").textContent = "Resume generated!";
+                    document.getElementById("resume-link").innerHTML = `<a href="${resumeUrl}" target="_blank">Download Your Resume</a>`;
+                } else {
+                    const data = await response.json();
+                    document.getElementById("message").textContent = `Error: ${data.message}`;
+                }
+            } catch (error) {
+                document.getElementById("message").textContent = `Error: ${error.message}`;
+            }
+        }
+
+        console.log("Script loaded");
+    </script>
+</body>
+</html>
