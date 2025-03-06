@@ -69,14 +69,7 @@ SmartResume/
      const SAVE_PROFILE_API = "<save_profile_endpoint>";
      const GENERATE_RESUME_API = "<generate_resume_endpoint>";
      ```
-   - Example (your current values):
-     ```javascript
-     const COGNITO_DOMAIN = "https://resumerx-auth-9vnemkmy.auth.us-east-1.amazoncognito.com";
-     const CLIENT_ID = "4u9a4udpfv635np1bh2adsqe1f";
-     const REDIRECT_URI = "https://dx0qzndoavbcc.cloudfront.net";
-     const SAVE_PROFILE_API = "https://h88vho7i88.execute-api.us-east-1.amazonaws.com/prod/save-profile";
-     const GENERATE_RESUME_API = "https://h88vho7i88.execute-api.us-east-1.amazonaws.com/prod/generate-resume";
-     ```
+
 
 2. **Upload to S3**:
    - Apply Terraform to upload:
