@@ -1,10 +1,13 @@
 node_modules/
 build/
 *.log
-*.zip
+
 wkhtmltopdf_layer/
 wkhtmltox/
 terraform.tfstate
 terraform.tfstate.backup
 .terraform/
 wkhtml.deb
+.terraform.lock.hcl
+.terraform.tfstate.lock.info
+lambda_function.py

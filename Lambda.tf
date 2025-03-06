@@ -1,17 +1,42 @@
-# IAM role for Lambda (shared by both functions)
+resource "aws_lambda_function" "save_profile_lambda" {
+  filename      = "save_profile_lambda.zip"
+  function_name = "SaveProfileLambda"
+  role          = aws_iam_role.lambda_exec_role.arn
+  handler       = "lambda_function.lambda_handler"
+  runtime       = "python3.9"
+  environment {
+    variables = {
+      FRONTEND_DOMAIN = "https://${aws_cloudfront_distribution.frontend_distribution.domain_name}"
+    }
+  }
+}
+
+resource "aws_lambda_function" "generate_resume_lambda" {
+  filename      = "generate_resume_lambda.zip"
+  function_name = "GenerateResumeLambda"
+  role          = aws_iam_role.lambda_exec_role.arn
+  handler       = "lambda_function.lambda_handler"
+  runtime       = "python3.9"
+  environment {
+    variables = {
+      FRONTEND_DOMAIN = "https://${aws_cloudfront_distribution.frontend_distribution.domain_name}"
+    }
+  }
+}
+
+# Assuming this exists in your Lambda.tf or another file
 resource "aws_iam_role" "lambda_exec_role" {
   name = "lambda_exec_role"
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
-      Action = "sts:AssumeRole"
-      Effect = "Allow"
+      Action    = "sts:AssumeRole"
+      Effect    = "Allow"
       Principal = { Service = "lambda.amazonaws.com" }
     }]
   })
 }
 
-# Policy for DynamoDB and S3 access (Comprehend moved to Comprehend.tf)
 resource "aws_iam_role_policy" "lambda_policy" {
   name   = "lambda_policy"
   role   = aws_iam_role.lambda_exec_role.id
@@ -19,41 +44,24 @@ resource "aws_iam_role_policy" "lambda_policy" {
     Version = "2012-10-17"
     Statement = [
       {
-        Effect = "Allow"
-        Action = ["dynamodb:PutItem", "dynamodb:GetItem"]
-        Resource = aws_dynamodb_table.user_profiles.arn
+        Effect   = "Allow"
+        Action   = [
+          "dynamodb:PutItem",
+          "dynamodb:GetItem",
+          "s3:PutObject",
+          "comprehend:DetectEntities",
+          "comprehend:DetectKeyPhrases"
+        ]
+        Resource = [
+          aws_dynamodb_table.user_profiles.arn,
+          "arn:aws:s3:::resumerx-resumes-5y3lp26l/*"
+        ]
       },
       {
-        Effect = "Allow"
-        Action = ["s3:PutObject", "s3:GetObject"]
-        Resource = "${aws_s3_bucket.resume_bucket.arn}/*"
+        Effect   = "Allow"
+        Action   = "logs:*"
+        Resource = "*"
       }
     ]
   })
-}
-
-# Basic Lambda execution policy
-resource "aws_iam_role_policy_attachment" "lambda_basic_execution" {
-  role       = aws_iam_role.lambda_exec_role.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
-}
-
-# Lambda function for save-profile
-resource "aws_lambda_function" "save_profile_lambda" {
-  function_name = "SaveProfileLambda"
-  handler       = "lambda_function.lambda_handler"
-  runtime       = "python3.9"
-  role          = aws_iam_role.lambda_exec_role.arn
-  filename      = "save_profile_lambda.zip"
-  source_code_hash = filebase64sha256("save_profile_lambda.zip")
-}
-
-# Lambda function for generate-resume
-resource "aws_lambda_function" "generate_resume_lambda" {
-  function_name = "GenerateResumeLambda"
-  handler       = "lambda_function.lambda_handler"
-  runtime       = "python3.9"
-  role          = aws_iam_role.lambda_exec_role.arn
-  filename      = "generate_resume_lambda.zip"
-  source_code_hash = filebase64sha256("generate_resume_lambda.zip")
 }

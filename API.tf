@@ -1,108 +1,88 @@
-# API Gateway REST API
-resource "aws_api_gateway_rest_api" "resume_api" {
-  name = "ResumeRxAPI"
+resource "aws_apigatewayv2_api" "resume_api" {
+  name          = "ResumeRxAPIv2"
+  protocol_type = "HTTP"
+  cors_configuration {
+    allow_origins = ["https://${aws_cloudfront_distribution.frontend_distribution.domain_name}"]
+    allow_methods = ["OPTIONS", "POST"]
+    allow_headers = ["Content-Type", "Authorization"]
+    max_age       = 300
+  }
 }
 
-# Resource for /save-profile
-resource "aws_api_gateway_resource" "save_profile_resource" {
-  rest_api_id = aws_api_gateway_rest_api.resume_api.id
-  parent_id   = aws_api_gateway_rest_api.resume_api.root_resource_id
-  path_part   = "save-profile"
+resource "aws_apigatewayv2_stage" "prod" {
+  api_id      = aws_apigatewayv2_api.resume_api.id
+  name        = "prod"
+  auto_deploy = true
 }
 
-# POST method for /save-profile
-resource "aws_api_gateway_method" "save_profile_method" {
-  rest_api_id   = aws_api_gateway_rest_api.resume_api.id
-  resource_id   = aws_api_gateway_resource.save_profile_resource.id
-  http_method   = "POST"
-  authorization = "NONE"
+# Save Profile Route with Authorizer
+resource "aws_apigatewayv2_route" "save_profile" {
+  api_id             = aws_apigatewayv2_api.resume_api.id
+  route_key          = "POST /save-profile"
+  target             = "integrations/${aws_apigatewayv2_integration.save_profile.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
 }
 
-# Integration with SaveProfileLambda
-resource "aws_api_gateway_integration" "save_profile_integration" {
-  rest_api_id             = aws_api_gateway_rest_api.resume_api.id
-  resource_id             = aws_api_gateway_resource.save_profile_resource.id
-  http_method             = aws_api_gateway_method.save_profile_method.http_method
-  integration_http_method = "POST"
-  type                    = "AWS_PROXY"
-  uri                     = aws_lambda_function.save_profile_lambda.invoke_arn
+resource "aws_apigatewayv2_integration" "save_profile" {
+  api_id                 = aws_apigatewayv2_api.resume_api.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.save_profile_lambda.invoke_arn
+  payload_format_version = "2.0"
 }
 
-# Resource for /generate-resume
-resource "aws_api_gateway_resource" "generate_resume_resource" {
-  rest_api_id = aws_api_gateway_rest_api.resume_api.id
-  parent_id   = aws_api_gateway_rest_api.resume_api.root_resource_id
-  path_part   = "generate-resume"
+# Generate Resume Route with Authorizer
+resource "aws_apigatewayv2_route" "generate_resume" {
+  api_id             = aws_apigatewayv2_api.resume_api.id
+  route_key          = "POST /generate-resume"
+  target             = "integrations/${aws_apigatewayv2_integration.generate_resume.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
 }
 
-# POST method for /generate-resume
-resource "aws_api_gateway_method" "generate_resume_method" {
-  rest_api_id   = aws_api_gateway_rest_api.resume_api.id
-  resource_id   = aws_api_gateway_resource.generate_resume_resource.id
-  http_method   = "POST"
-  authorization = "NONE"
+resource "aws_apigatewayv2_integration" "generate_resume" {
+  api_id                 = aws_apigatewayv2_api.resume_api.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.generate_resume_lambda.invoke_arn
+  payload_format_version = "2.0"
 }
 
-# Integration with GenerateResumeLambda
-resource "aws_api_gateway_integration" "generate_resume_integration" {
-  rest_api_id             = aws_api_gateway_rest_api.resume_api.id
-  resource_id             = aws_api_gateway_resource.generate_resume_resource.id
-  http_method             = aws_api_gateway_method.generate_resume_method.http_method
-  integration_http_method = "POST"
-  type                    = "AWS_PROXY"
-  uri                     = aws_lambda_function.generate_resume_lambda.invoke_arn
+# Cognito Authorizer
+resource "aws_apigatewayv2_authorizer" "cognito" {
+  api_id           = aws_apigatewayv2_api.resume_api.id
+  name             = "CognitoAuthorizer"
+  authorizer_type  = "JWT"
+  identity_sources = ["$request.header.Authorization"]
+  jwt_configuration {
+    audience = [aws_cognito_user_pool_client.resume_app_client.id]
+    issuer   = "https://cognito-idp.${var.aws_region}.amazonaws.com/${aws_cognito_user_pool.resume_user_pool.id}"
+  }
 }
 
-# Permission for API Gateway to invoke SaveProfileLambda
-resource "aws_lambda_permission" "save_profile_api_permission" {
+# Lambda Permissions
+resource "aws_lambda_permission" "api_gateway_save_profile" {
   statement_id  = "AllowAPIGatewayInvokeSaveProfile"
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.save_profile_lambda.function_name
   principal     = "apigateway.amazonaws.com"
-  source_arn    = "${aws_api_gateway_rest_api.resume_api.execution_arn}/*/*"
+  source_arn    = "${aws_apigatewayv2_api.resume_api.execution_arn}/*/*"
 }
 
-# Permission for API Gateway to invoke GenerateResumeLambda
-resource "aws_lambda_permission" "generate_resume_api_permission" {
+resource "aws_lambda_permission" "api_gateway_generate_resume" {
   statement_id  = "AllowAPIGatewayInvokeGenerateResume"
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.generate_resume_lambda.function_name
   principal     = "apigateway.amazonaws.com"
-  source_arn    = "${aws_api_gateway_rest_api.resume_api.execution_arn}/*/*"
+  source_arn    = "${aws_apigatewayv2_api.resume_api.execution_arn}/*/*"
 }
 
-# API deployment
-resource "aws_api_gateway_deployment" "resume_api_deployment" {
-  rest_api_id = aws_api_gateway_rest_api.resume_api.id
-  triggers = {
-    redeployment = sha1(jsonencode([
-      aws_api_gateway_resource.save_profile_resource.id,
-      aws_api_gateway_method.save_profile_method.id,
-      aws_api_gateway_integration.save_profile_integration.id,
-      aws_api_gateway_resource.generate_resume_resource.id,
-      aws_api_gateway_method.generate_resume_method.id,
-      aws_api_gateway_integration.generate_resume_integration.id
-    ]))
-  }
-
-  depends_on = [
-    aws_api_gateway_integration.save_profile_integration,
-    aws_api_gateway_integration.generate_resume_integration
-  ]
-}
-
-# API stage
-resource "aws_api_gateway_stage" "resume_api_stage" {
-  rest_api_id   = aws_api_gateway_rest_api.resume_api.id
-  deployment_id = aws_api_gateway_deployment.resume_api_deployment.id
-  stage_name    = "prod"
-}
-
-# Output the endpoints
+# Outputs
 output "save_profile_endpoint" {
-  value = "${aws_api_gateway_stage.resume_api_stage.invoke_url}/save-profile"
+  value = "${aws_apigatewayv2_api.resume_api.api_endpoint}/prod/save-profile"
 }
 
 output "generate_resume_endpoint" {
-  value = "${aws_api_gateway_stage.resume_api_stage.invoke_url}/generate-resume"
+  value = "${aws_apigatewayv2_api.resume_api.api_endpoint}/prod/generate-resume"
 }
